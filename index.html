@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+    	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+
+		<title>Shared Things</title>
+       	<!-- <link href="jquery-ui-1.10.4.custom/css/smoothness/jquery-ui-1.10.4.custom.css" rel="stylesheet"> ignore jquery ui styles in favour of bootstrap --> 
+		<script src="bootstrap/js/jquery.min.js"></script> 
+		
+		<!-- enough jquery ui for dragging  -->
+        <script src="jquery-ui-1.10.4.custom/js/jquery-ui-1.10.4.custom.js"></script> 
+		
+		<!-- http://touchpunch.furf.com/ so jquery dragging is touch enabled -->
+		<script src="jquery.ui.touch-punch/jquery.ui.touch-punch.min.js"></script> 
+
+		<!-- Bootstrap -->
+		<link href="bootstrap/css/bootstrap.min.css" rel="stylesheet">
+
+		<style>
+			.draggable { position: absolute; } 
+			.click_world:hover { background: red; }
+			h1 { padding-left: 3em; }
+		</style>
+		<script src="config.js" ></script>
+		<script>
+			/**
+			 * Functions for sockets
+			 */
+			var socket;
+			
+			$(function(){	// INSERT YOUR SERVER'S DOMAIN! (1 of 2)
+				socket = new WebSocket("ws://yourserver.com"+port);
+				socket.onopen = function (event) {
+					console.log("connected");
+				};
+				socket.onclose = function (event) {
+					alert("closed code:" + event.code + ", reason:" +event.reason + ", wasClean:"+event.wasClean);
+				};
+				socket.onmessage = function (event) {
+					console.log('received: %s', event.data);
+					var op = event.data.substring(0,2);
+					var newdata = event.data.substring(2, event.data.length);
+					newdata = JSON.parse(newdata);
+					switch (op) {
+						case '00': // list of all worlds
+							displayListOfWorlds(newdata);
+							break;
+						case '11': // update a world state
+							$.each(newdata, function(key, value) {
+								if (world_ID == key) {
+									$("#active_world").html("<h1>"+world_ID+"</h1>");
+									deltaWorldState = value;
+									setWorldState();
+								}
+							});
+							$("#world").show();
+							break;
+					}
+				}
+			});
+			
+			
+			/**
+			 * Functions to initialize the local world state
+			 */
+			var world_ID ='';
+			var worldState = {"x1":{"x":8,"y":8},"x2":{"x":8,"y":8},"x3":{"x":8,"y":8},"x4":{"x":8,"y":8},"x5":{"x":8,"y":8},"o1":{"x":8,"y":8},"o2":{"x":8,"y":8},"o3":{"x":8,"y":8},"o4":{"x":8,"y":8},"o5":{"x":8,"y":8},"tttboard":{"x":8,"y":8}};
+			
+			function displayListOfWorlds(worldList) {
+				$("#list_of_worlds").html('');
+				$.each(worldList, function(key, value) {
+					var output = '<li><a class="click_world" id="_'+value+'" onclick="selectWorld(this.id);">'+value+'</a></li>'
+					$("#list_of_worlds").append(output);
+				});
+			}
+			
+			function selectWorld(get_world) {
+				get_world = get_world.substring(1,get_world.length);
+				world_ID = get_world;
+				getWorld(world_ID);
+			}
+			
+			function createWorld(new_ID) {
+				world_ID = new_ID;
+				socket.send('00'+new_ID);		// '00': op for create a new world
+			}
+			
+			function getWorld(world_ID) {
+				socket.send('01'+world_ID);		// '01': op to get state for initialization
+			}
+			
+			$(function(){
+				if (world_ID == '') {
+					$("#world").hide();
+					$("#select_world").show();
+				}
+				
+				$("#create_world_form").on('click', function() {
+					if ($("#new_ID").val() != '') {
+						createWorld($("#new_ID").val());
+						$("#new_ID").val('');
+					}
+				});
+			});
+			
+			
+			/**
+			 * Functions for world state
+			 */
+			var deltaWorldState = {};
+			
+			$(function() {
+				$("#world img").draggable(); 
+				$("#world img").on("dragstart", function(event, ui) { logDrag(event, ui); });
+				$("#world img").on("dragstop" , function(event, ui) { logDrag(event, ui); });
+				$("#world img").on("drag"     , function(event, ui) { logDrag(event, ui); });
+			});
+			
+			function setWorldState() {
+				$.each(deltaWorldState, function(key, value) {
+					$('#'+key).offset({left: deltaWorldState[key]['x'], top: deltaWorldState[key]['y']});
+					worldState[key]['x'] = deltaWorldState[key]['x'];
+					worldState[key]['y'] = deltaWorldState[key]['y'];
+				});
+				console.log("updated local world state");
+			}
+			
+			function logDrag(event, ui){
+				// reset deltaWorldState
+				deltaWorldState = {};
+				var sendState = {};
+				
+				deltaWorldState[event.target.id] = {'x': ui.position.left, 'y': ui.position.top};
+				sendState[world_ID] = deltaWorldState;
+				
+				socket.send('11'+JSON.stringify(sendState)); 		// '11': op for update world state
+				console.log('Sent: %s', JSON.stringify(sendState));
+				
+				worldState[event.target.id]['x'] = ui.position.left;
+				worldState[event.target.id]['y'] = ui.position.top;
+			}
+			
+			function resetConn() {	// INSERT YOUR SERVER'S DOMAIN! (2 of 2)
+				socket = new WebSocket("ws://yourserver.com:"+port);
+			}			
+		</script>
+	</head>
+
+	<body style="padding-top:70px; padding-bottom:70px;" >
+		<!-- try {.navbar-fixed-top, .navbar-fixed-bottom, .navbar-static-top} X {.navbar-inverse }
+		have to add padding-top:70px, or padding-bottom:70px for fixed navbar-->
+		<nav class="navbar navbar-default navbar-fixed-top navbar-inverse">
+			<div class="container-fluid">
+				<!-- Brand and toggle get grouped for better mobile display -->
+				<div class="navbar-header">
+					<button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+						<span class="sr-only">Toggle navigation</span>
+						<span class="icon-bar"></span>
+						<span class="icon-bar"></span>
+						<span class="icon-bar"></span>
+					</button>
+					<a class="navbar-brand" href="#">Tic-Tac-Toe!</a>
+				</div>
+
+				<!-- Collect the nav links, forms, and other content for toggling -->
+				<div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">      
+					<ul class="nav navbar-nav navbar-right">
+						<form class="navbar-form navbar-left">
+							<div class="form-group">
+								<input type="text" class="form-control" id="new_ID" placeholder="Create new world">
+							</div>
+							<button type="button" id="create_world_form" class="btn btn-default">Submit</button>
+						</form>
+						<li class="dropdown">
+							<a href="#" class="dropdown-toggle" data-toggle="dropdown">Active Worlds<b class="caret"></b></a>
+							<ul class="dropdown-menu" id="list_of_worlds">
+							</ul>
+						</li>
+					</ul>
+				</div><!-- /.navbar-collapse -->
+			</div><!-- /.container-fluid -->
+		</nav>
+		<h1>Current world: <div id="active_world">none</div></h1>
+
+		<div id="world">
+			<img id="x1" src="images/x.gif" style="z-index:2;" class="draggable" />
+			<img id="x2" src="images/x.gif" style="z-index:2;" class="draggable" />
+			<img id="x3" src="images/x.gif" style="z-index:2;" class="draggable" />
+			<img id="x4" src="images/x.gif" style="z-index:2;" class="draggable" />
+			<img id="x5" src="images/x.gif" style="z-index:2;" class="draggable" />
+			<img id="o1" src="images/o.gif" style="z-index:2;" class="draggable" />
+			<img id="o2" src="images/o.gif" style="z-index:2;" class="draggable" />
+			<img id="o3" src="images/o.gif" style="z-index:2;" class="draggable" />
+			<img id="o4" src="images/o.gif" style="z-index:2;" class="draggable" />
+			<img id="o5" src="images/o.gif" style="z-index:2;" /class="draggable" >
+			<img id="tttboard" src="images/tictactoe.gif" style="z-index:1;" class="draggable" />
+		</div>
+		<!-- Bootstrap -->
+		<script src="bootstrap/js/bootstrap.min.js"></script>
+	</body>
+</html>
+
